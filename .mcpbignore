@@ -1,0 +1,10 @@
+# В расширение попадают только manifest.json и server/
+README.md
+docs/
+dist/
+package.json
+.gitignore
+.github/
+*.mcpb
+.env
+.env.*

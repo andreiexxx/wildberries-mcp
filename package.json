@@ -1,0 +1,22 @@
+{
+  "name": "wildberries-mcp",
+  "version": "1.0.0",
+  "description": "Кабинет продавца Wildberries в Claude через MCP",
+  "main": "server/index.js",
+  "bin": {
+    "wildberries-mcp": "server/index.js"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "pack": "npx -y @anthropic-ai/mcpb pack . dist/wildberries.mcpb"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreiexxx/wildberries-mcp.git"
+  },
+  "keywords": ["wildberries", "mcp", "claude"],
+  "license": "MIT"
+}

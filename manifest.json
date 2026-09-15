@@ -1,0 +1,70 @@
+{
+  "manifest_version": "0.3",
+  "name": "wildberries-mcp",
+  "display_name": "Wildberries",
+  "version": "1.0.0",
+  "description": "Кабинет продавца Wildberries в Claude: продажи, остатки, реклама и ДРР, отзывы, воронка, ставки и цены.",
+  "long_description": "Подключает ваш кабинет Wildberries к Claude. Спрашивайте обычными словами: «сколько продали за неделю», «какой ДРР по кампаниям», «покажи отзывы без ответа». Токен хранится в защищённом хранилище системы на вашем компьютере и отправляется только в API Wildberries. Изменение ставок, пауза кампаний и цены выключены по умолчанию и включаются отдельной галочкой.",
+  "author": {
+    "name": "Андрей Пекинский",
+    "url": "https://noonz.ru"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreiexxx/wildberries-mcp"
+  },
+  "homepage": "https://github.com/andreiexxx/wildberries-mcp",
+  "documentation": "https://github.com/andreiexxx/wildberries-mcp#readme",
+  "support": "https://github.com/andreiexxx/wildberries-mcp/issues",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "WB_TOKEN": "${user_config.wb_token}",
+        "WB_ALLOW_WRITE": "${user_config.allow_write}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "wb_check", "description": "Проверка подключения и токена" },
+    { "name": "wb_sales", "description": "Продажи и возвраты за период" },
+    { "name": "wb_stocks", "description": "Остатки на складах WB" },
+    { "name": "wb_products", "description": "Карточки товаров" },
+    { "name": "wb_ad_balance", "description": "Баланс рекламного счёта" },
+    { "name": "wb_campaigns", "description": "Рекламные кампании" },
+    { "name": "wb_ad_stats", "description": "Статистика рекламы и ДРР" },
+    { "name": "wb_reviews", "description": "Отзывы покупателей" },
+    { "name": "wb_questions", "description": "Вопросы покупателей" },
+    { "name": "wb_funnel", "description": "Воронка продаж по карточкам" },
+    { "name": "wb_set_bid", "description": "Изменить ставку (если разрешены изменения)" },
+    { "name": "wb_campaign_state", "description": "Пауза или запуск кампании (если разрешены изменения)" },
+    { "name": "wb_set_price", "description": "Изменить цену (если разрешены изменения)" }
+  ],
+  "user_config": {
+    "wb_token": {
+      "type": "string",
+      "title": "Токен WB API",
+      "description": "Персональный токен из кабинета продавца: Профиль → Интеграции по API → «+ Создать токен». Хранится в защищённом хранилище системы.",
+      "sensitive": true,
+      "required": true
+    },
+    "allow_write": {
+      "type": "boolean",
+      "title": "Разрешить изменения",
+      "description": "Разрешить Claude менять ставки, ставить кампании на паузу и менять цены. По умолчанию выключено: Claude только читает данные.",
+      "default": false,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "keywords": ["wildberries", "wb", "маркетплейс", "реклама", "аналитика", "mcp"],
+  "license": "MIT"
+}
