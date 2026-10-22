@@ -1,0 +1,29 @@
+services:
+  wb-mcp:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_HOST: ${DOMAIN}
+    # наружу порт не открываем — к серверу ходит только Caddy
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - wb-mcp
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

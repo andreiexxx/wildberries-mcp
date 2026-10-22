@@ -215,6 +215,49 @@ Mac: папка `~/Library/Logs/Claude/`. Windows: `%APPDATA%\Claude\logs`. Фа
 
 ## Для продвинутых
 
+### На свой сервер — для claude.ai, телефона и Codex
+
+Расширение работает, пока открыт Claude на вашем компьютере. Если нужен
+доступ отовсюду — с телефона, из браузера, из Codex, — поставьте этот же
+сервер на свой VPS. Те же 13 инструментов, только по адресу в интернете.
+
+Нужно: VPS на Ubuntu 22.04 или 24.04, домен (или бесплатный поддомен
+duckdns.org), смотрящий на IP сервера, и токен WB.
+
+```bash
+git clone https://github.com/andreiexxx/wildberries-mcp.git wb-mcp
+cd wb-mcp
+sudo bash install.sh
+```
+
+Установщик спросит домен и токен, сам поставит Docker, получит сертификат
+HTTPS и напечатает адрес вида `https://ваш-домен/mcp?key=СЕКРЕТ`.
+Этот адрес — ключ доступа, не пересылайте его.
+
+Подключение:
+
+- **Claude** (приложение или claude.ai): Настройки → Connectors → Add custom
+  connector → вставить адрес → Add. Поля OAuth оставить пустыми.
+- **Claude Code:** `claude mcp add --transport http wildberries "АДРЕС"`
+- **Codex:** `codex mcp add wildberries --url "АДРЕС"`
+
+Изменения на сервере **выключены**. Включаются строкой `WB_ALLOW_WRITE=true`
+в файле `.env` и командой `docker compose up -d`. Учтите: тогда менять
+ставки и цены сможет любой, у кого есть адрес коннектора.
+
+Обслуживание — из папки `wb-mcp`:
+
+| Задача | Команда |
+|---|---|
+| Показать адрес ещё раз | `sudo bash install.sh url` |
+| Обновить | `sudo bash install.sh update` |
+| Логи | `docker compose logs -f wb-mcp` |
+| Сменить токен или секрет | поправить `.env`, затем `docker compose up -d` |
+
+Защита: без секрета сервер отвечает 401, запросы не на ваш домен отклоняются,
+адреса запросов не пишутся в журнал, наружу открыт только HTTPS через Caddy.
+
+
 ### Claude Code
 
 Нужен Node.js 18 или новее.

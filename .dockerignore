@@ -1,0 +1,8 @@
+.env
+.env.*
+.git
+dist
+*.mcpb
+node_modules
+README.md
+docs

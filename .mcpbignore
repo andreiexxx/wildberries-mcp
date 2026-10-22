@@ -8,3 +8,8 @@ package.json
 *.mcpb
 .env
 .env.*
+Dockerfile
+docker-compose.yml
+Caddyfile
+install.sh
+.dockerignore

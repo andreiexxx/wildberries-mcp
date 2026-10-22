@@ -11,6 +11,10 @@
 // Протокол: MCP поверх stdio, по одной строке JSON на сообщение. В stdout
 // пишутся ТОЛЬКО ответы протокола. Любые логи — в stderr, иначе Claude
 // получит мусор вместо ответа и отключит расширение.
+//
+// Второй режим — свой сервер (MCP_TRANSPORT=http): тот же протокол поверх
+// HTTPS, чтобы подключаться коннектором из claude.ai, с телефона и из Codex.
+// Доступ закрыт секретом MCP_SECRET. Код режима — в конце файла.
 
 const VERSION = '1.0.0';
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -23,6 +27,13 @@ function envValue(name) {
 
 const TOKEN = envValue('WB_TOKEN');
 const ALLOW_WRITE = /^(true|1|yes)$/i.test(envValue('WB_ALLOW_WRITE'));
+const HOSTED = /^http$/i.test(envValue('MCP_TRANSPORT'));
+
+// Где человеку менять настройки: в расширении или в файле .env на сервере.
+const TOKEN_PLACE = HOSTED
+  ? 'в WB_TOKEN в файле .env на сервере (затем выполните docker compose up -d)'
+  : 'в настройках расширения';
+const WRITE_PLACE = HOSTED ? 'на сервере' : 'в настройках расширения';
 
 function log(...parts) {
   process.stderr.write(`[wildberries] ${parts.join(' ')}\n`);
@@ -86,7 +97,7 @@ function tokenWarnings(info) {
   }
   const out = [];
   if (info.exp && info.exp * 1000 < Date.now()) {
-    out.push('Срок действия токена истёк. Создайте новый в кабинете WB и вставьте его в настройках расширения.');
+    out.push(`Срок действия токена истёк. Создайте новый в кабинете WB и вставьте его ${TOKEN_PLACE}.`);
   } else if (info.exp) {
     const days = Math.floor((info.exp * 1000 - Date.now()) / 86_400_000);
     if (days <= 14) out.push(`Токен перестанет работать через ${days} дн. Заранее создайте новый.`);
@@ -130,7 +141,7 @@ const HOSTS = {
 
 function humanStatus(status) {
   if (status === 401) {
-    return 'WB не принял токен: он истёк (токен живёт 180 дней), удалён или скопирован не целиком. Создайте новый и вставьте его в настройках расширения.';
+    return `WB не принял токен: он истёк (токен живёт 180 дней), удалён или скопирован не целиком. Создайте новый и вставьте его ${TOKEN_PLACE}.`;
   }
   if (status === 403) {
     return 'У токена нет доступа к этому разделу. Создайте токен заново и отметьте нужные категории.';
@@ -143,7 +154,9 @@ function humanStatus(status) {
 async function wb(host, path, { method = 'GET', body, timeoutMs = 30_000 } = {}) {
   if (!TOKEN) {
     throw new WbError(
-      'Токен WB не указан. Откройте в Claude: Настройки (Settings) → Расширения (Extensions) → Wildberries → Настроить (Configure) и вставьте токен.',
+      HOSTED
+        ? `Токен WB не указан. Впишите его ${TOKEN_PLACE}.`
+        : 'Токен WB не указан. Откройте в Claude: Настройки (Settings) → Расширения (Extensions) → Wildberries → Настроить (Configure) и вставьте токен.',
     );
   }
   let res;
@@ -193,7 +206,7 @@ async function checkConnection() {
     токенТолькоНаЧтение: info ? info.readOnly : null,
     действуетДо: info && info.exp ? new Date(info.exp * 1000).toISOString().slice(0, 10) : null,
     изменения: ALLOW_WRITE
-      ? 'разрешены в настройках расширения (ставки, паузы, цены)'
+      ? `разрешены ${WRITE_PLACE} (ставки, паузы, цены)`
       : 'выключены — Claude только читает данные',
     предупреждения: tokenWarnings(info),
   };
@@ -462,13 +475,15 @@ const PRICE_MAX_CHANGE_PCT = 50;
 function assertWriteAllowed() {
   if (!ALLOW_WRITE) {
     throw new WbError(
-      'Изменения выключены — сейчас Claude может только читать данные. Чтобы разрешить менять ставки, паузы и цены: Claude → Настройки (Settings) → Расширения (Extensions) → Wildberries → Настроить (Configure) → включите «Разрешить изменения» и сохраните.',
+      HOSTED
+        ? 'Изменения выключены — сейчас Claude может только читать данные. Чтобы разрешить менять ставки, паузы и цены, владелец сервера ставит WB_ALLOW_WRITE=true в файле .env и выполняет docker compose up -d.'
+        : 'Изменения выключены — сейчас Claude может только читать данные. Чтобы разрешить менять ставки, паузы и цены: Claude → Настройки (Settings) → Расширения (Extensions) → Wildberries → Настроить (Configure) → включите «Разрешить изменения» и сохраните.',
     );
   }
   const info = decodeToken(TOKEN);
   if (info && info.readOnly) {
     throw new WbError(
-      'Токен создан с уровнем доступа «Только чтение», поэтому WB не даст ничего изменить. Создайте новый токен с уровнем «Чтение и запись» и вставьте его в настройках расширения.',
+      `Токен создан с уровнем доступа «Только чтение», поэтому WB не даст ничего изменить. Создайте новый токен с уровнем «Чтение и запись» и вставьте его ${TOKEN_PLACE}.`,
     );
   }
 }
@@ -648,7 +663,7 @@ const TOOLS = [
     name: 'wb_set_bid',
     title: 'Изменить ставку',
     description:
-      'МЕНЯЕТ СТАВКУ рекламной кампании (в рублях за 1000 показов). Работает, только если в настройках расширения разрешены изменения. Предохранитель: не выше 5000 ₽. Вызывай, только если человек явно попросил изменить ставку.',
+      `МЕНЯЕТ СТАВКУ рекламной кампании (в рублях за 1000 показов). Работает, только если ${WRITE_PLACE} разрешены изменения. Предохранитель: не выше 5000 ₽. Вызывай, только если человек явно попросил изменить ставку.`,
     annotations: WRITE,
     inputSchema: {
       type: 'object',
@@ -663,7 +678,7 @@ const TOOLS = [
     name: 'wb_campaign_state',
     title: 'Пауза или запуск кампании',
     description:
-      'СТАВИТ НА ПАУЗУ или ЗАПУСКАЕТ рекламную кампанию. Работает, только если в настройках расширения разрешены изменения. Вызывай, только если человек явно попросил.',
+      `СТАВИТ НА ПАУЗУ или ЗАПУСКАЕТ рекламную кампанию. Работает, только если ${WRITE_PLACE} разрешены изменения. Вызывай, только если человек явно попросил.`,
     annotations: WRITE,
     inputSchema: {
       type: 'object',
@@ -678,7 +693,7 @@ const TOOLS = [
     name: 'wb_set_price',
     title: 'Изменить цену',
     description:
-      'МЕНЯЕТ ЦЕНУ товара. Работает, только если в настройках расширения разрешены изменения. Предохранитель: изменение больше чем на 50% от текущей цены не пройдёт. Вызывай, только если человек явно попросил.',
+      `МЕНЯЕТ ЦЕНУ товара. Работает, только если ${WRITE_PLACE} разрешены изменения. Предохранитель: изменение больше чем на 50% от текущей цены не пройдёт. Вызывай, только если человек явно попросил.`,
     annotations: WRITE,
     inputSchema: {
       type: 'object',
@@ -697,7 +712,9 @@ const WRITE_TOOLS = new Set(['wb_set_bid', 'wb_campaign_state', 'wb_set_price'])
 const INSTRUCTIONS = [
   'Это доступ к кабинету продавца Wildberries.',
   'Если задача касается данных WB — продажи, остатки, товары, реклама, ставки, ДРР, отзывы, вопросы, воронка, цены — используй эти инструменты.',
-  'НЕ проси у человека токен WB и не предлагай вписать его в файлы или переменные: токен уже сохранён в настройках расширения на этом компьютере.',
+  HOSTED
+    ? 'НЕ проси у человека токен WB: он уже сохранён на сервере, к которому ты подключён.'
+    : 'НЕ проси у человека токен WB и не предлагай вписать его в файлы или переменные: токен уже сохранён в настройках расширения на этом компьютере.',
   'Если инструмент вернул ошибку — перескажи её человеку своими словами; для диагностики вызови wb_check.',
   'Инструменты wb_set_bid, wb_campaign_state и wb_set_price действительно меняют магазин. Перед вызовом убедись, что человек прямо об этом попросил, и назови, что именно изменишь.',
 ].join(' ');
@@ -803,21 +820,26 @@ function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
-async function handle(msg) {
-  if (!msg || typeof msg !== 'object' || typeof msg.method !== 'string') return;
+// Возвращает ответ на сообщение или null, если ответ не нужен.
+async function respond(msg) {
+  if (!msg || typeof msg !== 'object' || typeof msg.method !== 'string') return null;
   // Уведомление (без id) ответа не требует.
-  if (!Object.prototype.hasOwnProperty.call(msg, 'id')) return;
+  if (!Object.prototype.hasOwnProperty.call(msg, 'id')) return null;
   try {
     const result = await dispatch(msg.method, msg.params || {});
-    send({ jsonrpc: '2.0', id: msg.id, result });
+    return { jsonrpc: '2.0', id: msg.id, result };
   } catch (e) {
     if (e instanceof RpcError) {
-      send({ jsonrpc: '2.0', id: msg.id, error: { code: e.code, message: e.message } });
-    } else {
-      log('внутренняя ошибка:', (e && e.stack) || e);
-      send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Внутренняя ошибка сервера' } });
+      return { jsonrpc: '2.0', id: msg.id, error: { code: e.code, message: e.message } };
     }
+    log('внутренняя ошибка:', (e && e.stack) || e);
+    return { jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Внутренняя ошибка сервера' } };
   }
+}
+
+async function handle(msg) {
+  const reply = await respond(msg);
+  if (reply) send(reply);
 }
 
 function onLine(line) {
@@ -831,20 +853,128 @@ function onLine(line) {
   for (const msg of Array.isArray(parsed) ? parsed : [parsed]) handle(msg);
 }
 
-let buffer = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  buffer += chunk;
-  let i;
-  while ((i = buffer.indexOf('\n')) >= 0) {
-    const line = buffer.slice(0, i).trim();
-    buffer = buffer.slice(i + 1);
-    if (line) onLine(line);
+function runStdio() {
+  let buffer = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk) => {
+    buffer += chunk;
+    let i;
+    while ((i = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, i).trim();
+      buffer = buffer.slice(i + 1);
+      if (line) onLine(line);
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
+}
+
+// ── Свой сервер: MCP поверх HTTP ──────────────────────────────────────────
+// Streamable HTTP без сессий: каждый POST — самостоятельный запрос, ответ
+// приходит обычным JSON. Перезапуск сервера не рвёт подключение клиента.
+//
+// Защита:
+// 1. Секрет MCP_SECRET в адресе (?key=…) — так его можно вставить в поле
+//    коннектора Claude — или в заголовке «Authorization: Bearer …».
+// 2. Host должен совпадать с PUBLIC_HOST: защита от DNS rebinding.
+// 3. Адреса запросов не логируем — в них секрет.
+const MAX_BODY = 1_000_000;
+
+function runHttp() {
+  const http = require('node:http');
+  const crypto = require('node:crypto');
+
+  const SECRET = envValue('MCP_SECRET');
+  if (SECRET.length < 24) {
+    log('MCP_SECRET не задан или короче 24 символов. Сгенерируйте: openssl rand -hex 24');
+    process.exit(1);
   }
-});
-process.stdin.on('end', () => process.exit(0));
+  if (!TOKEN) {
+    log('WB_TOKEN не задан — впишите токен WB в файл .env.');
+    process.exit(1);
+  }
+  const PUBLIC_HOST = envValue('PUBLIC_HOST').toLowerCase();
+  if (!PUBLIC_HOST) log('PUBLIC_HOST не задан — принимаю запросы только на localhost.');
+  const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+  if (PUBLIC_HOST) allowedHosts.add(PUBLIC_HOST);
+
+  const secretBuf = Buffer.from(SECRET);
+  function keyOk(presented) {
+    const b = Buffer.from(String(presented || ''));
+    // timingSafeEqual требует равной длины — сравниваем хэши
+    const h = (x) => crypto.createHash('sha256').update(x).digest();
+    return crypto.timingSafeEqual(h(b), h(secretBuf)) && b.length === secretBuf.length;
+  }
+
+  function reply(res, status, body, headers = {}) {
+    const isJson = typeof body !== 'string';
+    const text = isJson ? JSON.stringify(body) : body;
+    res.writeHead(status, {
+      'Content-Type': isJson ? 'application/json' : 'text/plain; charset=utf-8',
+      'Content-Length': Buffer.byteLength(text),
+      'Cache-Control': 'no-store',
+      ...headers,
+    });
+    res.end(text);
+  }
+
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost');
+    const path = url.pathname.replace(/\/+$/, '') || '/';
+
+    if (path === '/health') return reply(res, 200, 'ok');
+    if (path !== '/mcp') return reply(res, 404, 'not found');
+
+    const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    if (!allowedHosts.has(host)) return reply(res, 421, 'misdirected request');
+
+    const auth = String(req.headers.authorization || '');
+    const presented = url.searchParams.get('key') || (/^bearer /i.test(auth) ? auth.slice(7).trim() : '');
+    if (!keyOk(presented)) return reply(res, 401, 'unauthorized');
+
+    // Без сессий: поток событий (GET) и закрытие сессии (DELETE) не нужны.
+    if (req.method !== 'POST') return reply(res, 405, 'method not allowed', { Allow: 'POST' });
+
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_BODY) {
+        reply(res, 413, 'payload too large');
+        req.destroy();
+      } else chunks.push(c);
+    });
+    req.on('end', async () => {
+      if (res.writableEnded) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } catch {
+        return reply(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Не удалось разобрать сообщение' } });
+      }
+      const batch = Array.isArray(parsed);
+      const replies = (await Promise.all((batch ? parsed : [parsed]).map(respond))).filter(Boolean);
+      // Только уведомления — ответа нет, по спецификации это 202.
+      if (replies.length === 0) {
+        res.writeHead(202, { 'Content-Length': 0 });
+        return res.end();
+      }
+      reply(res, 200, batch ? replies : replies[0]);
+    });
+  });
+
+  const port = Number(envValue('PORT')) || 8000;
+  const host = envValue('HOST') || '0.0.0.0';
+  server.listen(port, host, () => log(`HTTP-режим: слушаю ${host}:${port}, домен ${PUBLIC_HOST || 'не задан'}`));
+  const stop = () => server.close(() => process.exit(0));
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+}
+
 process.on('unhandledRejection', (e) => log('необработанная ошибка:', (e && e.stack) || e));
 
 log(
   `запущен v${VERSION}; токен ${TOKEN ? 'указан' : 'НЕ указан'}; изменения ${ALLOW_WRITE ? 'разрешены' : 'выключены'}`,
 );
+
+if (HOSTED) runHttp();
+else runStdio();
